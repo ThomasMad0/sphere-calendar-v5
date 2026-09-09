@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Sphere Calendar</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#3A1F30" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Sphere" />
+<style>
+  html, body { margin:0; padding:0; background:#F7EEF3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 0px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-type="module">
+const { useState, useMemo, useEffect } = React;
+
+const ICONS = ["📚", "🏃", "🍽️", "🎨", "💤", "🎵", "🧠", "🌱"];
+
+const seedActivities = [
+  { id: 1, time: "07:30", title: "Wake up + stretch", icon: "🌱" },
+  { id: 2, time: "08:15", title: "Breakfast", icon: "🍽️" },
+  { id: 3, time: "09:00", title: "Maths class", icon: "📚" },
+  { id: 4, time: "12:30", title: "Lunch", icon: "🍽️" },
+  { id: 5, time: "13:15", title: "DT coursework", icon: "🎨" },
+  { id: 6, time: "16:00", title: "Football practice", icon: "🏃" },
+  { id: 7, time: "19:00", title: "Guitar practice", icon: "🎵" },
+  { id: 8, time: "21:30", title: "Wind down", icon: "💤" },
+];
+
+function timeToMinutes(t) {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+function nowMinutes() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+const STORAGE_KEY = "sphere-calendar-activities";
+
+function loadSavedActivities() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return seedActivities;
+}
+
+function SphereApp() {
+  const [activities, setActivities] = useState(loadSavedActivities);
+  const [showForm, setShowForm] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState(null);
+  const [form, setForm] = useState({ time: "", title: "", icon: ICONS[0] });
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(activities)); } catch (e) {}
+  }, [activities]);
+
+  const sorted = useMemo(
+    () => [...activities].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time)),
+    [activities]
+  );
+
+  const current = nowMinutes();
+  const currentIndex = useMemo(() => {
+    let idx = -1;
+    sorted.forEach((a, i) => { if (timeToMinutes(a.time) <= current) idx = i; });
+    return idx;
+  }, [sorted, current]);
+
+  function addActivity() {
+    if (!form.time || !form.title.trim()) return;
+    setActivities((prev) => [...prev, { id: Date.now(), time: form.time, title: form.title.trim(), icon: form.icon }]);
+    setForm({ time: "", title: "", icon: ICONS[0] });
+    setShowForm(false);
+  }
+
+  function removeActivity(id) {
+    setActivities((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function handleSync() {
+    setSyncing(true);
+    setTimeout(() => {
+      setSyncing(false);
+      setConnected(true);
+      setLastSynced(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    }, 1400);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", width: "100%", display: "flex", alignItems: "flex-start", justifyContent: "center", background: "#F7EEF3", padding: "0" }}>
+      <div style={{ width: "100%", maxWidth: 480, background: "white", minHeight: "100vh" }}>
+        <div style={{ background: "#3A1F30", color: "#F7EEF3", padding: "28px 24px 24px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <p style={{ fontSize: 12, color: "#C9A8BC", margin: 0 }}>Sphere Calendar</p>
+              <h1 style={{ fontSize: 26, fontFamily: "Georgia, serif", margin: "2px 0 0" }}>Today</h1>
+            </div>
+            <button onClick={handleSync} style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 999,
+              fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer",
+              background: connected ? "#5FBE7A" : "#5A4152", color: connected ? "#1E3324" : "#F7EEF3"
+            }}>
+              {syncing ? "Syncing…" : connected ? "🟢 Synced" : "⚪ Not linked"}
+            </button>
+          </div>
+          {lastSynced && <p style={{ fontSize: 11, color: "#C9A8BC", marginTop: 8 }}>Last sent to device at {lastSynced}</p>}
+        </div>
+
+        <div style={{ padding: "20px 20px 8px", maxHeight: "60vh", overflowY: "auto" }}>
+          {sorted.map((a, i) => {
+            const isNow = i === currentIndex;
+            const isPast = timeToMinutes(a.time) < current && !isNow;
+            return (
+              <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: "50%", display: "flex", alignItems: "center",
+                    justifyContent: "center", fontSize: 18, flexShrink: 0,
+                    background: isNow ? "#5FBE7A" : isPast ? "#F0E4EC" : "#F7EEF3",
+                    boxShadow: isNow ? "0 0 0 4px rgba(95,190,122,0.25)" : "none",
+                    opacity: isPast ? 0.5 : 1
+                  }}>{a.icon}</div>
+                  {i < sorted.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 22, background: "#F0E4EC", margin: "4px 0" }} />}
+                </div>
+                <div style={{ flex: 1, paddingBottom: 20, paddingTop: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, margin: 0, color: isPast ? "#B79CAE" : "#3A1F30" }}>{a.title}</p>
+                    <button onClick={() => removeActivity(a.id)} style={{ border: "none", background: "none", color: "#C9A8BC", cursor: "pointer", fontSize: 13 }}>✕</button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                    <span style={{ fontSize: 11, color: "#B79CAE" }}>{a.time}</span>
+                    {isNow && <span style={{ fontSize: 10, fontWeight: 500, color: "#2F8F52", background: "#E3F5E8", padding: "2px 8px", borderRadius: 999 }}>Now</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {showForm && (
+          <div style={{ padding: "0 20px 16px", borderTop: "1px solid #F0E4EC", paddingTop: 16 }}>
+            <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}
+              style={{ width: "100%", fontSize: 14, padding: "9px 12px", borderRadius: 12, border: "1px solid #F0E4EC", background: "#F7EEF3", marginBottom: 8, outline: "none" }} />
+            <input type="text" placeholder="What's happening?" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              style={{ width: "100%", fontSize: 14, padding: "9px 12px", borderRadius: 12, border: "1px solid #F0E4EC", background: "#F7EEF3", marginBottom: 8, outline: "none" }} />
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              {ICONS.map((ic) => (
+                <button key={ic} onClick={() => setForm({ ...form, icon: ic })}
+                  style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer", fontSize: 14, background: form.icon === ic ? "#E8A0C4" : "#F7EEF3" }}>{ic}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={addActivity} style={{ flex: 1, background: "#3A1F30", color: "white", fontSize: 14, fontWeight: 500, padding: "11px", borderRadius: 12, border: "none", cursor: "pointer" }}>Add to schedule</button>
+              <button onClick={() => setShowForm(false)} style={{ padding: "11px 14px", borderRadius: 12, border: "1px solid #F0E4EC", background: "white", color: "#B79CAE", cursor: "pointer" }}>✕</button>
+            </div>
+          </div>
+        )}
+
+        {!showForm && (
+          <div style={{ padding: "6px 20px 24px" }}>
+            <button onClick={() => setShowForm(true)} style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              background: "#E8A0C4", color: "#3A1F30", fontSize: 14, fontWeight: 600, padding: "13px",
+              borderRadius: 12, border: "none", cursor: "pointer"
+            }}>+ Add activity</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<SphereApp />);
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
