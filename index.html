@@ -93,13 +93,35 @@ function SphereApp() {
     setActivities((prev) => prev.filter((a) => a.id !== id));
   }
 
-  function handleSync() {
+  const DEVICE_URL = "http://192.168.68.129/schedule"; // Build B board (Waveshare) address
+
+  async function handleSync() {
     setSyncing(true);
-    setTimeout(() => {
+    try {
+      const payload = activities.map((a) => ({
+        time: a.time,
+        duration: a.duration,
+        title: a.title,
+        description: a.description || "",
+      }));
+      const res = await fetch(DEVICE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setConnected(true);
+        setLastSynced(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      } else {
+        setConnected(false);
+      }
+    } catch (e) {
+      // Couldn't reach the device — likely not on the same WiFi network,
+      // or the IP address above has changed.
+      setConnected(false);
+    } finally {
       setSyncing(false);
-      setConnected(true);
-      setLastSynced(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-    }, 1400);
+    }
   }
 
   return (
